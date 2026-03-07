@@ -30,6 +30,12 @@ def register_view(request):
         "phone_number": "+1234567890"  # optional
     }
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Register request received from {request.META.get('REMOTE_ADDR')}")
+    logger.info(f"Request headers: {dict(request.headers)}")
+    logger.info(f"Request data: {request.data}")
+    
     serializer = UserRegistrationSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.save()
@@ -68,6 +74,12 @@ def login_view(request):
         "password": "password123"
     }
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Login request received from {request.META.get('REMOTE_ADDR')}")
+    logger.info(f"Request headers: {dict(request.headers)}")
+    logger.info(f"Request data: {dict(request.data)}")
+    
     serializer = LoginSerializer(data=request.data, context={'request': request})
     
     if serializer.is_valid():
@@ -87,6 +99,11 @@ def login_view(request):
                 }
             }
         }, status=status.HTTP_200_OK)
+    
+    # Log the serializer errors for debugging
+    logger.error(f"Login serializer errors: {serializer.errors}")
+    logger.error(f"Email provided: {request.data.get('email')}")
+    logger.error(f"Password provided: {'***' if request.data.get('password') else 'None'}")
     
     return Response({
         'success': False,

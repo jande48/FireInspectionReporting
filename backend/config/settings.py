@@ -28,7 +28,13 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-s401apf19kda&hrk0fi+4
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
+# ALLOWED_HOSTS configuration
+# In development, allow all hosts (including ngrok domains)
+# In production, use specific domains from environment variable
+if DEBUG:
+    ALLOWED_HOSTS = ['*']  # Allow all hosts in development (including ngrok)
+else:
+    ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 
 
 # Application definition
@@ -47,6 +53,7 @@ INSTALLED_APPS = [
     "corsheaders",
     # Local apps
     "users",
+    "projects",
 ]
 
 MIDDLEWARE = [
@@ -59,6 +66,32 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+# CSRF Configuration
+# For API endpoints using DRF, CSRF is handled by DRF
+# In development, be more lenient with CSRF
+if DEBUG:
+    # In development, allow common origins including ngrok
+    CSRF_TRUSTED_ORIGINS = [
+        'http://localhost',
+        'http://127.0.0.1',
+        'http://localhost:3000',
+        'http://localhost:8081',
+        'https://*.ngrok.io',
+        'https://*.ngrok-free.app',
+        'http://*.ngrok.io',
+        'http://*.ngrok-free.app',
+    ]
+    CSRF_COOKIE_SECURE = False  # Allow HTTP in development
+    CSRF_COOKIE_HTTPONLY = False
+else:
+    CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='', cast=Csv())
+
+# Proxy settings for ngrok and other reverse proxies
+# ngrok acts as a reverse proxy, so we need to trust X-Forwarded headers
+USE_X_FORWARDED_HOST = True
+USE_X_FORWARDED_PORT = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 ROOT_URLCONF = "config.urls"
 
@@ -180,11 +213,16 @@ SIMPLE_JWT = {
 
 
 # CORS Configuration
-CORS_ALLOWED_ORIGINS = config(
-    'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:3000,exp://localhost:8081',
-    cast=Csv()
-)
+# In development, allow all origins for easier testing
+# In production, use CORS_ALLOWED_ORIGINS with specific domains
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    CORS_ALLOWED_ORIGINS = config(
+        'CORS_ALLOWED_ORIGINS',
+        default='http://127.0.0.1:3000,http://localhost:3000,exp://localhost:8081',
+        cast=Csv()
+    )
 
 CORS_ALLOW_CREDENTIALS = True
 

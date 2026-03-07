@@ -59,23 +59,52 @@ class LoginSerializer(serializers.Serializer):
     )
 
     def validate(self, attrs):
+        import logging
+        logger = logging.getLogger(__name__)
+        
         email = attrs.get('email')
         password = attrs.get('password')
 
-        if email and password:
-            user = authenticate(request=self.context.get('request'),
-                              username=email, password=password)
-            if not user:
-                raise serializers.ValidationError(
-                    'Unable to log in with provided credentials.'
-                )
-            if not user.is_active:
-                raise serializers.ValidationError(
-                    'User account is disabled.'
-                )
-            attrs['user'] = user
-        else:
+        if not email or not password:
             raise serializers.ValidationError(
                 'Must include "email" and "password".'
             )
+
+        # Try to get the user first to check if they exist
+        try:
+            user_obj = User.objects.get(email=email)
+            logger.info(f"User found: {user_obj.email}, is_active: {user_obj.is_active}")
+            logger.info(f"User username field: {user_obj.USERNAME_FIELD}")
+        except User.DoesNotExist:
+            logger.warning(f"User with email {email} does not exist")
+            raise serializers.ValidationError(
+                'Unable to log in with provided credentials.'
+            )
+
+        # Authenticate using email as username (since USERNAME_FIELD = 'email')
+        # Django's authenticate() uses the USERNAME_FIELD, so username=email should work
+        user = authenticate(request=self.context.get('request'),
+                          username=email, password=password)
+        
+        if not user:
+            logger.warning(f"Authentication failed for email: {email}")
+            logger.warning(f"Trying manual password check...")
+            # Manual password check for debugging
+            if user_obj.check_password(password):
+                logger.info("Manual password check PASSED - but authenticate() failed")
+                logger.info("This suggests an authentication backend issue")
+            else:
+                logger.warning("Manual password check FAILED - password is incorrect")
+            raise serializers.ValidationError(
+                'Unable to log in with provided credentials.'
+            )
+        
+        if not user.is_active:
+            logger.warning(f"User {email} is not active")
+            raise serializers.ValidationError(
+                'User account is disabled.'
+            )
+        
+        logger.info(f"Authentication successful for user: {user.email}")
+        attrs['user'] = user
         return attrs
