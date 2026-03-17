@@ -237,3 +237,15 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
+
+# AWS S3 Configuration (Linode Object Storage)
+# Credentials: use AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or S3_KEY/S3_SECRET
+AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID', default=config('S3_KEY', default=''))
+AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY', default=config('S3_SECRET', default=''))
+# Bucket: use S3_BUCKET or AWS_STORAGE_BUCKET_NAME (e.g. S3_BUCKET=fire-reports)
+AWS_STORAGE_BUCKET_NAME = config('S3_BUCKET', default=config('AWS_STORAGE_BUCKET_NAME', default=''))
+AWS_S3_REGION_NAME = config('AWS_S3_REGION_NAME', default='us-southeast-1')
+# Endpoint for Linode Object Storage (built from region; do not set to bucket name)
+AWS_S3_ENDPOINT_URL = f'https://{AWS_S3_REGION_NAME}.linodeobjects.com'
+AWS_S3_SIGNATURE_VERSION = 's3v4'
+AWS_DEFAULT_ACL = 'private'  # Files are private by default, accessed via presigned URLs

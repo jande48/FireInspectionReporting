@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .models import Template, Project, Report
 from .serializers import TemplateSerializer, ProjectSerializer, ReportSerializer
+from .s3_utils import generate_presigned_upload_url, generate_presigned_download_url
 
 
 @api_view(['GET', 'POST'])
@@ -342,4 +343,100 @@ def report_detail_view(request, pk):
             'success': True,
             'message': 'Report deleted successfully'
         }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_upload_url_view(request):
+    """
+    Generate a presigned URL for uploading a file to S3.
+    
+    POST /api/projects/upload-url/
+    Body: {
+        "field_name": "photo_field",
+        "filename": "photo.jpg"
+    }
+    Returns: {
+        "success": true,
+        "data": {
+            "upload_url": "https://...",
+            "fields": {...},
+            "file_key": "uploads/user_1/photo_field/uuid.jpg"
+        }
+    }
+    """
+    field_name = request.data.get('field_name')
+    filename = request.data.get('filename')
+    content_type = request.data.get('content_type', 'image/jpeg')
+    
+    if not field_name or not filename:
+        return Response({
+            'success': False,
+            'message': 'field_name and filename are required'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        presigned_data = generate_presigned_upload_url(
+            user_id=request.user.id,
+            field_name=field_name,
+            filename=filename,
+            content_type=content_type,
+        )
+        return Response({
+            'success': True,
+            'data': presigned_data
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_download_url_view(request):
+    """
+    Generate a presigned URL for downloading/viewing a file from S3.
+    
+    POST /api/projects/download-url/
+    Body: {
+        "file_key": "uploads/user_1/photo_field/uuid.jpg"
+    }
+    Returns: {
+        "success": true,
+        "data": {
+            "url": "https://..."
+        }
+    }
+    """
+    file_key = request.data.get('file_key')
+    
+    if not file_key:
+        return Response({
+            'success': False,
+            'message': 'file_key is required'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Verify the file belongs to the user (file_key should start with user_{user_id})
+    expected_prefix = f"uploads/user_{request.user.id}/"
+    if not file_key.startswith(expected_prefix):
+        return Response({
+            'success': False,
+            'message': 'Unauthorized access to file'
+        }, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        download_url = generate_presigned_download_url(file_key)
+        return Response({
+            'success': True,
+            'data': {
+                'url': download_url
+            }
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

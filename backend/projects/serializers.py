@@ -26,9 +26,9 @@ class TemplateSerializer(serializers.ModelSerializer):
             field_type = field.get('type')
             field_name = field.get('name')
             
-            if not field_type or field_type not in ['text', 'choice', 'datetime']:
+            if not field_type or field_type not in ['text', 'choice', 'datetime', 'file']:
                 raise serializers.ValidationError(
-                    f"Field type must be 'text', 'choice', or 'datetime'. Got: {field_type}"
+                    f"Field type must be 'text', 'choice', 'datetime', or 'file'. Got: {field_type}"
                 )
             
             if not field_name or not isinstance(field_name, str):
@@ -115,6 +115,18 @@ class ReportSerializer(serializers.ModelSerializer):
                                 raise serializers.ValidationError(
                                     f"Value '{field_value}' is not a valid choice for field '{field_name}'"
                                 )
+                        elif field_type == 'file':
+                            # File fields should be arrays of file keys (S3 object keys)
+                            if not isinstance(field_value, list):
+                                raise serializers.ValidationError(
+                                    f"Field '{field_name}' must be an array of file keys"
+                                )
+                            # Validate each file key is a string
+                            for file_key in field_value:
+                                if not isinstance(file_key, str):
+                                    raise serializers.ValidationError(
+                                        f"All file keys in field '{field_name}' must be strings"
+                                    )
             except Project.DoesNotExist:
                 pass  # Project validation will happen in the view
         

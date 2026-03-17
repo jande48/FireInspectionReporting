@@ -1,0 +1,7 @@
+# Environment and secrets (both backend and frontend)
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
