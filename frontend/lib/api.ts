@@ -51,23 +51,58 @@ export interface RegisterRequest {
   phone_number?: string;
 }
 
+export interface UserProfile {
+  id: number;
+  email: string;
+  username: string;
+  first_name?: string;
+  last_name?: string;
+  phone_number?: string;
+  address?: string | null;
+  website?: string | null;
+  profile_photo_key?: string | null;
+  avatar_url?: string | null;
+}
+
 export interface AuthResponse {
   success: boolean;
   message: string;
   data?: {
-    user: {
-      id: number;
-      email: string;
-      username: string;
-      first_name?: string;
-      last_name?: string;
-      phone_number?: string;
-    };
-    tokens: {
+    user: UserProfile;
+    tokens?: {
       access: string;
       refresh: string;
     };
   };
+  errors?: Record<string, string[]>;
+}
+
+export interface ProfileUpdateRequest {
+  first_name?: string;
+  last_name?: string;
+  phone_number?: string;
+  address?: string | null;
+  website?: string | null;
+  profile_photo_key?: string | null;
+}
+
+export interface ProfileResponse {
+  success: boolean;
+  message?: string;
+  data?: { user: UserProfile };
+  errors?: Record<string, string[]>;
+}
+
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+  new_password2: string;
+}
+
+export interface ProfileAvatarUploadUrlResponse {
+  success: boolean;
+  message?: string;
+  data?: { upload_url: string; file_key: string };
   errors?: Record<string, string[]>;
 }
 
@@ -344,6 +379,60 @@ class ApiService {
       return {
         success: false,
         message: 'Failed to fetch profile',
+        errors: { network: ['Failed to connect to server'] },
+      };
+    }
+  }
+
+  async updateProfile(payload: ProfileUpdateRequest): Promise<ProfileResponse> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await fetch(`${API_BASE_URL}/auth/profile/update/`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify(payload),
+      });
+      return await response.json();
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to update profile',
+        errors: { network: ['Failed to connect to server'] },
+      };
+    }
+  }
+
+  async changePassword(payload: ChangePasswordRequest): Promise<ProfileResponse> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await fetch(`${API_BASE_URL}/auth/change-password/`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+      return await response.json();
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to change password',
+        errors: { network: ['Failed to connect to server'] },
+      };
+    }
+  }
+
+  async getProfileAvatarUploadUrl(filename: string, content_type?: string): Promise<ProfileAvatarUploadUrlResponse> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await fetch(`${API_BASE_URL}/auth/profile/avatar/upload-url/`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ filename, content_type: content_type || 'image/jpeg' }),
+      });
+      return await response.json();
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to get upload URL',
         errors: { network: ['Failed to connect to server'] },
       };
     }

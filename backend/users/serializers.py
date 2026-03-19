@@ -3,6 +3,12 @@ from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth import authenticate
 from .models import User
 
+# Optional: only used when profile_photo_key is set (for avatar_url)
+try:
+    from projects.s3_utils import generate_presigned_download_url
+except ImportError:
+    generate_presigned_download_url = None
+
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     """Serializer for user registration"""
@@ -19,12 +25,17 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('email', 'username', 'password', 'password2', 
-                  'first_name', 'last_name', 'phone_number')
+        fields = (
+            'email', 'username', 'password', 'password2',
+            'first_name', 'last_name', 'phone_number',
+            'address', 'website',
+        )
         extra_kwargs = {
             'first_name': {'required': False},
             'last_name': {'required': False},
             'phone_number': {'required': False},
+            'address': {'required': False},
+            'website': {'required': False},
         }
 
     def validate(self, attrs):
@@ -41,12 +52,42 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    """Serializer for user details"""
+    """Serializer for user details. avatar_url is a short-lived presigned URL when profile_photo_key is set."""
+    avatar_url = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = User
-        fields = ('id', 'email', 'username', 'first_name', 'last_name', 
-                  'phone_number', 'is_active', 'created_at', 'updated_at')
+        fields = (
+            'id', 'email', 'username', 'first_name', 'last_name',
+            'phone_number', 'address', 'website',
+            'profile_photo_key', 'avatar_url',
+            'is_active', 'created_at', 'updated_at',
+        )
         read_only_fields = ('id', 'is_active', 'created_at', 'updated_at')
+        extra_kwargs = {
+            'address': {'allow_null': True, 'required': False, 'allow_blank': True},
+            'website': {'allow_null': True, 'required': False, 'allow_blank': True},
+        }
+
+    def get_avatar_url(self, obj):
+        if not obj.profile_photo_key or not generate_presigned_download_url:
+            return None
+        try:
+            return generate_presigned_download_url(obj.profile_photo_key, expiration=3600)
+        except Exception:
+            return None
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """Serializer for changing password. Requires current_password and new_password."""
+    current_password = serializers.CharField(required=True, write_only=True)
+    new_password = serializers.CharField(required=True, write_only=True, validators=[validate_password])
+    new_password2 = serializers.CharField(required=True, write_only=True)
+
+    def validate(self, attrs):
+        if attrs['new_password'] != attrs['new_password2']:
+            raise serializers.ValidationError({'new_password': 'New password fields did not match.'})
+        return attrs
 
 
 class LoginSerializer(serializers.Serializer):

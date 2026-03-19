@@ -12,7 +12,7 @@ class UserAdmin(BaseUserAdmin):
     ordering = ('-created_at',)
     
     fieldsets = BaseUserAdmin.fieldsets + (
-        ('Additional Info', {'fields': ('phone_number',)}),
+        ('Additional Info', {'fields': ('phone_number', 'address', 'website', 'profile_photo_key')}),
         ('Timestamps', {'fields': ('created_at', 'updated_at')}),
     )
     

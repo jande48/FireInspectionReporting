@@ -10,6 +10,10 @@ interface User {
   first_name?: string;
   last_name?: string;
   phone_number?: string;
+  address?: string | null;
+  website?: string | null;
+  profile_photo_key?: string | null;
+  avatar_url?: string | null;
 }
 
 interface AuthContextType {

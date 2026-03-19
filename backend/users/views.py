@@ -4,13 +4,20 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model
+
 from .serializers import (
     UserRegistrationSerializer,
     UserSerializer,
-    LoginSerializer
+    LoginSerializer,
+    ChangePasswordSerializer,
 )
 
 User = get_user_model()
+
+try:
+    from projects.s3_utils import generate_presigned_upload_url
+except ImportError:
+    generate_presigned_upload_url = None
 
 
 @api_view(['POST'])
@@ -154,11 +161,12 @@ def user_profile_view(request):
     
     GET /api/auth/profile/
     Headers: Authorization: Bearer <access_token>
+    Returns: { success, data: { user: <user with avatar_url presigned> } }
     """
     serializer = UserSerializer(request.user)
     return Response({
         'success': True,
-        'data': serializer.data
+        'data': {'user': serializer.data},
     }, status=status.HTTP_200_OK)
 
 
@@ -168,30 +176,103 @@ def update_profile_view(request):
     """
     Update current user profile.
     
-    PUT/PATCH /api/auth/profile/
+    PUT/PATCH /api/auth/profile/update/
     Headers: Authorization: Bearer <access_token>
     Body: {
         "first_name": "Updated",
         "last_name": "Name",
-        "phone_number": "+1234567890"
+        "phone_number": "+1234567890",
+        "profile_photo_key": "uploads/user_1/avatar/uuid.jpg"  # after uploading to S3
     }
     """
     serializer = UserSerializer(
         request.user,
         data=request.data,
-        partial=True
+        partial=True,
     )
-    
     if serializer.is_valid():
         serializer.save()
         return Response({
             'success': True,
             'message': 'Profile updated successfully',
-            'data': serializer.data
+            'data': {'user': serializer.data},
         }, status=status.HTTP_200_OK)
-    
     return Response({
         'success': False,
         'message': 'Update failed',
-        'errors': serializer.errors
+        'errors': serializer.errors,
     }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_password_view(request):
+    """
+    Change password for the current user.
+    
+    POST /api/auth/change-password/
+    Headers: Authorization: Bearer <access_token>
+    Body: {
+        "current_password": "old",
+        "new_password": "newsecure",
+        "new_password2": "newsecure"
+    }
+    """
+    serializer = ChangePasswordSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response({
+            'success': False,
+            'message': 'Validation failed',
+            'errors': serializer.errors,
+        }, status=status.HTTP_400_BAD_REQUEST)
+    user = request.user
+    if not user.check_password(serializer.validated_data['current_password']):
+        return Response({
+            'success': False,
+            'message': 'Current password is incorrect',
+            'errors': {'current_password': ['Current password is incorrect.']},
+        }, status=status.HTTP_400_BAD_REQUEST)
+    user.set_password(serializer.validated_data['new_password'])
+    user.save()
+    return Response({
+        'success': True,
+        'message': 'Password changed successfully',
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def profile_avatar_upload_url_view(request):
+    """
+    Get a presigned URL to upload a profile avatar. Client uploads with PUT, then PATCH profile with profile_photo_key.
+    
+    POST /api/auth/profile/avatar/upload-url/
+    Headers: Authorization: Bearer <access_token>
+    Body: { "filename": "photo.jpg", "content_type": "image/jpeg" }
+    Returns: { success, data: { upload_url, file_key } }
+    """
+    if not generate_presigned_upload_url:
+        return Response({
+            'success': False,
+            'message': 'Avatar upload not configured',
+        }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    filename = request.data.get('filename') or 'avatar.jpg'
+    content_type = (request.data.get('content_type') or 'image/jpeg').strip()
+    if not content_type.startswith('image/'):
+        content_type = 'image/jpeg'
+    try:
+        result = generate_presigned_upload_url(
+            user_id=request.user.id,
+            field_name='avatar',
+            filename=filename,
+            content_type=content_type,
+        )
+        return Response({
+            'success': True,
+            'data': result,
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': str(e),
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

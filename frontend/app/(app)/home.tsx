@@ -57,6 +57,7 @@ export default function HomeScreen() {
   const [reportsExpanded, setReportsExpanded] = useState(true); // Expanded by default
   const [fileDownloadUrls, setFileDownloadUrls] = useState<Record<string, Record<string, string>>>({}); // {fieldName: {fileKey: url}}
   const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({}); // {fieldName: boolean}
+  const [selectedReportIds, setSelectedReportIds] = useState<number[]>([]);
 
   // Report management functions
   const openCreateReportModal = async () => {
@@ -207,6 +208,55 @@ export default function HomeScreen() {
         },
       ]
     );
+  };
+
+  const toggleReportSelection = (reportId: number) => {
+    setSelectedReportIds((prev) =>
+      prev.includes(reportId) ? prev.filter((id) => id !== reportId) : [...prev, reportId]
+    );
+  };
+
+  const toggleSelectAllReports = () => {
+    if (selectedReportIds.length === reports.length) {
+      setSelectedReportIds([]);
+    } else {
+      setSelectedReportIds(reports.map((r) => r.id));
+    }
+  };
+
+  const isReportSelected = (reportId: number) => selectedReportIds.includes(reportId);
+
+  /** Ordered list of data columns (template fields) to show in the reports table. Union from all reports. */
+  const getReportsTableDataColumns = (): TemplateField[] => {
+    const seen = new Set<string>();
+    const ordered: TemplateField[] = [];
+    for (const report of reports) {
+      const fields = report.template_fields ?? [];
+      for (const f of fields) {
+        if (f.name && !seen.has(f.name)) {
+          seen.add(f.name);
+          ordered.push(f);
+        }
+      }
+    }
+    return ordered;
+  };
+
+  const formatReportCellValue = (value: unknown, field: TemplateField): string => {
+    if (value === null || value === undefined) return '—';
+    if (field.type === 'file' && Array.isArray(value)) {
+      return value.length === 0 ? '—' : `${value.length} file${value.length !== 1 ? 's' : ''}`;
+    }
+    if (field.type === 'datetime' && (typeof value === 'string' || value instanceof Date)) {
+      try {
+        const d = new Date(value as string);
+        return isNaN(d.getTime()) ? String(value) : d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+      } catch {
+        return String(value);
+      }
+    }
+    const str = String(value);
+    return str.length > 50 ? str.slice(0, 47) + '…' : str;
   };
 
   // Get template fields for the selected project
@@ -1204,33 +1254,100 @@ export default function HomeScreen() {
           <ThemedText>No reports yet. Create your first report!</ThemedText>
         </ThemedView>
       ) : (
-        <ThemedView style={styles.templatesContainer}>
-          {reports.map((report) => (
-            <ThemedView key={report.id} style={[styles.templateCard, { borderColor }]}>
-              <ThemedView style={styles.templateHeader}>
-                <ThemedView>
-                  <ThemedText type="subtitle">{report.project_name || `Report #${report.id}`}</ThemedText>
-                  <ThemedText style={styles.templateDescription}>
-                    {new Date(report.created_at).toLocaleDateString()}
+        <ThemedView style={[styles.reportsTableContainer, { borderColor }]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+            <ThemedView style={styles.reportsTable}>
+              <ThemedView style={[styles.reportsTableHeader, { borderColor }]}>
+                <TouchableOpacity
+                  style={styles.reportsTableHeaderCellCheckbox}
+                  onPress={toggleSelectAllReports}
+                >
+                  <Ionicons
+                    name={selectedReportIds.length === reports.length && reports.length > 0 ? 'checkbox' : 'square-outline'}
+                    size={22}
+                    color={textColor}
+                  />
+                </TouchableOpacity>
+                <ThemedText style={[styles.reportsTableHeaderCell, styles.reportsTableColProject]}>
+                  Project
+                </ThemedText>
+                <ThemedText style={[styles.reportsTableHeaderCell, styles.reportsTableColDate]}>
+                  Date
+                </ThemedText>
+                {getReportsTableDataColumns().map((col) => (
+                  <ThemedText
+                    key={col.name}
+                    style={[styles.reportsTableHeaderCell, styles.reportsTableColData]}
+                    numberOfLines={1}
+                  >
+                    {col.name}
                   </ThemedText>
-                </ThemedView>
-                <ThemedView style={styles.templateActions}>
-                  <TouchableOpacity
-                    style={styles.iconButton}
-                    onPress={() => openEditReportModal(report)}
-                  >
-                    <Ionicons name="pencil" size={20} color="#0a7ea4" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.iconButton}
-                    onPress={() => handleDeleteReport(report)}
-                  >
-                    <Ionicons name="trash" size={20} color="#ff3b30" />
-                  </TouchableOpacity>
-                </ThemedView>
+                ))}
+                <ThemedText style={[styles.reportsTableHeaderCell, styles.reportsTableColActions]}>
+                  Actions
+                </ThemedText>
               </ThemedView>
+              {reports.map((report) => {
+                const dataColumns = getReportsTableDataColumns();
+                return (
+                  <ThemedView
+                    key={report.id}
+                    style={[styles.reportsTableRow, { borderColor }]}
+                  >
+                    <TouchableOpacity
+                      style={styles.reportsTableCellCheckbox}
+                      onPress={() => toggleReportSelection(report.id)}
+                    >
+                      <Ionicons
+                        name={isReportSelected(report.id) ? 'checkbox' : 'square-outline'}
+                        size={22}
+                        color={textColor}
+                      />
+                    </TouchableOpacity>
+                    <ThemedText
+                      style={[styles.reportsTableCell, styles.reportsTableColProject]}
+                      numberOfLines={1}
+                    >
+                      {report.project_name || `Report #${report.id}`}
+                    </ThemedText>
+                    <ThemedText
+                      style={[styles.reportsTableCell, styles.reportsTableColDate]}
+                    >
+                      {new Date(report.created_at).toLocaleDateString()}
+                    </ThemedText>
+                    {dataColumns.map((col) => (
+                      <ThemedText
+                        key={col.name}
+                        style={[styles.reportsTableCell, styles.reportsTableColData]}
+                        numberOfLines={1}
+                      >
+                        {formatReportCellValue(report.data?.[col.name], col)}
+                      </ThemedText>
+                    ))}
+                    <ThemedView style={[styles.reportsTableColActions, styles.reportsTableRowActions]}>
+                      <TouchableOpacity
+                        style={styles.iconButton}
+                        onPress={() => openEditReportModal(report)}
+                      >
+                        <Ionicons name="pencil" size={20} color="#0a7ea4" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.iconButton}
+                        onPress={() => handleDeleteReport(report)}
+                      >
+                        <Ionicons name="trash" size={20} color="#ff3b30" />
+                      </TouchableOpacity>
+                    </ThemedView>
+                  </ThemedView>
+                );
+              })}
             </ThemedView>
-          ))}
+          </ScrollView>
+          {selectedReportIds.length > 0 && (
+            <ThemedText style={[styles.reportsTableSelectionHint, { color: placeholderColor }]}>
+              {selectedReportIds.length} report{selectedReportIds.length !== 1 ? 's' : ''} selected (actions coming later)
+            </ThemedText>
+          )}
         </ThemedView>
       )}
         </>
@@ -2238,6 +2355,74 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     padding: 4,
+  },
+  reportsTableContainer: {
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  reportsTable: {
+    minWidth: '100%',
+  },
+  reportsTableHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  reportsTableHeaderCellCheckbox: {
+    width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  reportsTableHeaderCell: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  reportsTableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+  },
+  reportsTableCellCheckbox: {
+    width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  reportsTableCell: {
+    fontSize: 14,
+  },
+  reportsTableColProject: {
+    width: 140,
+    minWidth: 140,
+  },
+  reportsTableColDate: {
+    width: 100,
+    minWidth: 100,
+  },
+  reportsTableColData: {
+    width: 140,
+    minWidth: 140,
+    maxWidth: 200,
+  },
+  reportsTableColActions: {
+    width: 80,
+    minWidth: 80,
+  },
+  reportsTableRowActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  reportsTableSelectionHint: {
+    fontSize: 13,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   templateDescription: {
     opacity: 0.7,
