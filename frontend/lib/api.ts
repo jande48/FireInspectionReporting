@@ -179,6 +179,13 @@ export interface ReportResponse {
   errors?: Record<string, string[]>;
 }
 
+export interface ExportReportsResponse {
+  success: boolean;
+  message?: string;
+  data?: { download_url: string };
+  errors?: Record<string, string[]>;
+}
+
 export interface UploadUrlRequest {
   field_name: string;
   filename: string;
@@ -715,6 +722,24 @@ class ApiService {
       return {
         success: false,
         message: 'Failed to delete report',
+        errors: { network: ['Failed to connect to server'] },
+      };
+    }
+  }
+
+  async exportReports(reportIds: number[]): Promise<ExportReportsResponse> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await fetch(`${API_BASE_URL}/projects/reports/export/`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ report_ids: reportIds }),
+      });
+      return await response.json();
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to export reports',
         errors: { network: ['Failed to connect to server'] },
       };
     }

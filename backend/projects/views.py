@@ -4,7 +4,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .models import Template, Project, Report
 from .serializers import TemplateSerializer, ProjectSerializer, ReportSerializer
-from .s3_utils import generate_presigned_upload_url, generate_presigned_download_url
+from .s3_utils import (
+    generate_presigned_upload_url,
+    generate_presigned_download_url,
+    upload_pdf_to_s3,
+)
+from .pdf_export import build_reports_pdf
 
 
 @api_view(['GET', 'POST'])
@@ -439,4 +444,60 @@ def generate_download_url_view(request):
             'success': False,
             'message': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def export_reports_view(request):
+    """
+    Export selected reports as a PDF: cover (user profile + project) and per-report sections with fields and photos.
+    PDF is uploaded to S3 and a presigned download URL is returned.
+
+    POST /api/projects/reports/export/
+    Body: { "report_ids": [1, 2, 3] }
+    Returns: { success, data: { download_url } }
+    """
+    report_ids = request.data.get('report_ids')
+    if not report_ids or not isinstance(report_ids, list):
+        return Response({
+            'success': False,
+            'message': 'report_ids (list) is required',
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    reports = (
+        Report.objects.filter(user=request.user, id__in=report_ids)
+        .select_related('project', 'project__template')
+        .order_by('created_at')
+    )
+    reports = list(reports)
+    if len(reports) != len(report_ids):
+        return Response({
+            'success': False,
+            'message': 'One or more reports not found or access denied',
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    # try:
+    pdf_bytes = build_reports_pdf(request.user, reports)
+    # except Exception as e:
+    #     return Response({
+    #         'success': False,
+    #         'message': f'PDF generation failed: {str(e)}',
+    #     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # try:
+    file_key = upload_pdf_to_s3(request.user.id, pdf_bytes)
+    download_url = generate_presigned_download_url(file_key, expiration=86400)  # 24h
+    # except Exception as e:
+    #     return Response({
+    #         'success': False,
+    #         'message': f'Upload failed: {str(e)}',
+    #     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    return Response({
+        'success': True,
+        'data': {
+            'download_url': download_url,
+        },
+        'message': 'Export ready. Use the download URL to get your PDF.',
+    }, status=status.HTTP_200_OK)
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Platform, StyleSheet, Modal, TextInput, TouchableOpacity, Alert, ScrollView, ActivityIndicator, KeyboardAvoidingView, View, Image } from 'react-native';
+import { Platform, StyleSheet, Modal, TextInput, TouchableOpacity, Alert, ScrollView, ActivityIndicator, KeyboardAvoidingView, View, Image, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
@@ -58,6 +58,7 @@ export default function HomeScreen() {
   const [fileDownloadUrls, setFileDownloadUrls] = useState<Record<string, Record<string, string>>>({}); // {fieldName: {fileKey: url}}
   const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({}); // {fieldName: boolean}
   const [selectedReportIds, setSelectedReportIds] = useState<number[]>([]);
+  const [exportingReports, setExportingReports] = useState(false);
 
   // Report management functions
   const openCreateReportModal = async () => {
@@ -225,6 +226,27 @@ export default function HomeScreen() {
   };
 
   const isReportSelected = (reportId: number) => selectedReportIds.includes(reportId);
+
+  const handleExportReports = async () => {
+    if (selectedReportIds.length === 0) {
+      Alert.alert('No reports selected', 'Select at least one report to export.');
+      return;
+    }
+    setExportingReports(true);
+    try {
+      const response = await apiService.exportReports(selectedReportIds);
+      if (response.success && response.data?.download_url) {
+        await Linking.openURL(response.data.download_url);
+        Alert.alert('Export ready', 'Your PDF has been generated. It should open in your browser or download to your device.');
+      } else {
+        Alert.alert('Export failed', response.message ?? 'Could not export reports.');
+      }
+    } catch {
+      Alert.alert('Export failed', 'Failed to export reports.');
+    } finally {
+      setExportingReports(false);
+    }
+  };
 
   /** Ordered list of data columns (template fields) to show in the reports table. Union from all reports. */
   const getReportsTableDataColumns = (): TemplateField[] => {
@@ -1344,9 +1366,25 @@ export default function HomeScreen() {
             </ThemedView>
           </ScrollView>
           {selectedReportIds.length > 0 && (
-            <ThemedText style={[styles.reportsTableSelectionHint, { color: placeholderColor }]}>
-              {selectedReportIds.length} report{selectedReportIds.length !== 1 ? 's' : ''} selected (actions coming later)
-            </ThemedText>
+            <ThemedView style={styles.reportsTableSelectionRow}>
+              <ThemedText style={[styles.reportsTableSelectionHint, { color: placeholderColor }]}>
+                {selectedReportIds.length} report{selectedReportIds.length !== 1 ? 's' : ''} selected
+              </ThemedText>
+              <TouchableOpacity
+                style={[styles.exportButton, exportingReports && styles.exportButtonDisabled]}
+                onPress={handleExportReports}
+                disabled={exportingReports}
+              >
+                {exportingReports ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="document-text-outline" size={18} color="#fff" />
+                    <ThemedText style={styles.exportButtonText}>Export PDF</ThemedText>
+                  </>
+                )}
+              </TouchableOpacity>
+            </ThemedView>
           )}
         </ThemedView>
       )}
@@ -2419,10 +2457,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
-  reportsTableSelectionHint: {
-    fontSize: 13,
+  reportsTableSelectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingVertical: 8,
     paddingHorizontal: 12,
+    gap: 12,
+  },
+  reportsTableSelectionHint: {
+    fontSize: 13,
+  },
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0a7ea4',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    gap: 6,
+  },
+  exportButtonDisabled: {
+    opacity: 0.7,
+  },
+  exportButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   templateDescription: {
     opacity: 0.7,

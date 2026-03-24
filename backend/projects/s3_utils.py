@@ -97,3 +97,34 @@ def generate_presigned_download_url(file_key, expiration=3600):
         return presigned_url
     except Exception as e:
         raise Exception(f"Failed to generate download URL: {str(e)}")
+
+
+def get_object_bytes(file_key):
+    """
+    Read object bytes from S3. Returns bytes or None if not found/error.
+    """
+    s3_client = get_s3_client()
+    try:
+        response = s3_client.get_object(
+            Bucket=settings.AWS_STORAGE_BUCKET_NAME,
+            Key=file_key,
+        )
+        return response['Body'].read()
+    except Exception:
+        return None
+
+
+def upload_pdf_to_s3(user_id, pdf_bytes, filename='report_export.pdf'):
+    """
+    Upload PDF bytes to S3 under exports/user_{user_id}/{uuid}.pdf.
+    Returns the S3 object key.
+    """
+    s3_client = get_s3_client()
+    file_key = f"exports/user_{user_id}/{uuid.uuid4()}.pdf"
+    s3_client.put_object(
+        Bucket=settings.AWS_STORAGE_BUCKET_NAME,
+        Key=file_key,
+        Body=pdf_bytes,
+        ContentType='application/pdf',
+    )
+    return file_key
