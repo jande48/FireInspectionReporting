@@ -2,7 +2,7 @@ export default {
   expo: {
     name: 'MezaOC',
     slug: 'fire-inspection-reporting',
-    version: '1.0.0',
+    version: '1.0.2',
     orientation: 'portrait',
     icon: './assets/images/fire-icon.png',
     scheme: 'MezaOC',
@@ -11,7 +11,7 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.mezaoc.fireinspectionreporting',
-      buildNumber: '1',
+      buildNumber: '4',
       infoPlist: {
         NSCameraUsageDescription: 'Allow camera access so you can take photos and attach them to inspection reports.',
         NSPhotoLibraryUsageDescription: 'Allow access to your photo library so you can attach photos to inspection reports.',

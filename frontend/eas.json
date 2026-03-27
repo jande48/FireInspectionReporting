@@ -12,7 +12,7 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://45.79.217.56"
+        "EXPO_PUBLIC_API_URL": "https://45-79-217-56.ip.linodeusercontent.com"
       }
     }
   },
